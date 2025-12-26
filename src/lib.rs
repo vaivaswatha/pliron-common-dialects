@@ -1,19 +1,4 @@
-//! Tensor dialect for Pliron.
+//! Pliron dialects for tensors and related functionality.
 
-use pliron::{
-    context::Context,
-    dialect::{Dialect, DialectName},
-};
-
-pub mod attributes;
-pub mod ops;
-pub mod types;
-
-/// Register dialect, its ops, types and attributes into context.
-pub fn register(ctx: &mut Context) {
-    let dialect = Dialect::new(DialectName::new("tensor"));
-    dialect.register(ctx);
-    ops::register(ctx);
-    types::register(ctx);
-    attributes::register(ctx);
-}
+pub mod cf;
+pub mod tensor;

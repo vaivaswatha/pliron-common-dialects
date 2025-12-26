@@ -4,7 +4,7 @@ use pliron::{
     basic_block::BasicBlock,
     builtin::op_interfaces::{
         IsTerminatorInterface, OneOpdInterface, OneRegionInterface, OneResultInterface,
-        ZeroResultInterface,
+        SingleBlockRegionInterface, ZeroResultInterface,
     },
     common_traits::Verify,
     context::{Context, Ptr},
@@ -20,7 +20,7 @@ use pliron::{
     verify_err, verify_error,
 };
 
-use crate::types::{IndexType, RankedTensorType};
+use super::types::{IndexType, RankedTensorType};
 
 /// Op to generate a tensor by applying a function to generate the value at each index.
 /// See MLIR's [GenerateOp](https://mlir.llvm.org/docs/Dialects/TensorOps/#tensorgenerate-tensorgenerateop).
@@ -42,7 +42,7 @@ use crate::types::{IndexType, RankedTensorType};
 ///   yield a single value that matches the element type of the tensor.
 #[def_op("tensor.generate")]
 #[format_op("operands(CharSpace(`,`)) ` : ` type($0) region($0)")]
-#[derive_op_interface_impl(OneRegionInterface, OneResultInterface)]
+#[derive_op_interface_impl(SingleBlockRegionInterface, OneRegionInterface, OneResultInterface)]
 pub struct GenerateOp;
 
 #[derive(thiserror::Error, Debug)]

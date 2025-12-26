@@ -52,7 +52,7 @@ impl Parsable for Dimension {
     ) -> pliron::parsable::ParseResult<'a, Self::Parsed> {
         combine::parser::char::char('?')
             .map(|_| Dimension::Dynamic)
-            .or(u64::parser(()).map(|e| Dimension::Static(e)))
+            .or(u64::parser(()).map(Dimension::Static))
             .parse_stream(state_stream)
             .into_result()
     }
