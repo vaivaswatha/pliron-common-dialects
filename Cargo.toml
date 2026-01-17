@@ -1,5 +1,5 @@
 [package]
-name = "pliron-tensor"
+name = "pliron-common-dialects"
 version = "0.1.0"
 edition = "2024"
 

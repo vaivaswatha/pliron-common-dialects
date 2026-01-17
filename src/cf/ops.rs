@@ -31,7 +31,7 @@ use pliron::{
     verify_err,
 };
 
-use crate::tensor::types::IndexType;
+use crate::index::types::IndexType;
 
 #[derive(thiserror::Error, Debug)]
 pub enum YieldOpVerifyErr {

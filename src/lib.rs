@@ -1,4 +1,4 @@
-//! Pliron dialects for tensors and related functionality.
+//! Commonly used Pliron Dialects
 
 pub mod cf;
-pub mod tensor;
+pub mod index;
