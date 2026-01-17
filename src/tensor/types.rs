@@ -2,6 +2,7 @@
 
 use pliron::combine::{self, Parser};
 
+use pliron::derive::derive_type_get;
 use pliron::{
     builtin::{type_interfaces::FloatTypeInterface, types::IntegerType},
     common_traits::Verify,
@@ -11,7 +12,7 @@ use pliron::{
     parsable::Parsable,
     printable::Printable,
     result::Result,
-    r#type::{Type, TypeObj, TypePtr, type_impls},
+    r#type::{TypeObj, type_impls},
     verify_err_noloc,
 };
 
@@ -141,25 +142,7 @@ impl Verify for UnrankedTensorType {
 /// Index type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[def_type("tensor.index")]
+#[derive_type_get]
 #[format_type]
 pub struct IndexType;
 impl_verify_succ!(IndexType);
-
-impl IndexType {
-    /// Get the singleton instance of the index type in the given context.
-    pub fn get(ctx: &Context) -> TypePtr<IndexType> {
-        Type::get_instance(Self, ctx).expect("IndexType singleton not instantiated")
-    }
-
-    /// Register and instantiate (the singleton) in the dialect.
-    pub fn register_and_instantiate(ctx: &mut Context) {
-        IndexType::register_type_in_dialect(ctx, IndexType::parser_fn);
-    }
-}
-
-/// Register types in the dialect.
-pub fn register(ctx: &mut Context) {
-    RankedTensorType::register_type_in_dialect(ctx, RankedTensorType::parser_fn);
-    UnrankedTensorType::register_type_in_dialect(ctx, UnrankedTensorType::parser_fn);
-    IndexType::register_and_instantiate(ctx);
-}

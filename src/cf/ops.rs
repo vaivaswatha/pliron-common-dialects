@@ -364,9 +364,3 @@ impl Verify for ForOp {
         Ok(())
     }
 }
-
-/// Register ops in the dialect.
-pub fn register(_ctx: &mut Context) {
-    YieldOp::register(_ctx, YieldOp::parser_fn);
-    ForOp::register(_ctx, ForOp::parser_fn);
-}

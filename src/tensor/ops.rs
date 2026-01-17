@@ -15,7 +15,6 @@ use pliron::{
     linked_list::ContainsLinkedList,
     op::Op,
     operation::Operation,
-    parsable::Parsable,
     result::Result,
     r#type::{TypePtr, Typed},
     value::Value,
@@ -222,10 +221,3 @@ impl YieldOp {
 )]
 pub struct AddOp;
 impl_verify_succ!(AddOp);
-
-/// Register ops in the dialect.
-pub fn register(ctx: &mut Context) {
-    GenerateOp::register(ctx, GenerateOp::parser_fn);
-    YieldOp::register(ctx, YieldOp::parser_fn);
-    AddOp::register(ctx, AddOp::parser_fn);
-}
