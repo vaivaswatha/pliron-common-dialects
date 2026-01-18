@@ -1,14 +1,10 @@
 //! Control-flow ops and related functionality.
 
-use pliron::combine::{
-    Parser,
-    parser::char::{self, spaces},
-};
 use pliron::{
     basic_block::BasicBlock,
     builtin::op_interfaces::{
-        IsTerminatorInterface, OneRegionInterface, OperandSegmentInterface,
-        SingleBlockRegionInterface, ZeroResultInterface,
+        IsTerminatorInterface, NResultsInterface, OneRegionInterface, OperandSegmentInterface,
+        SingleBlockRegionInterface,
     },
     common_traits::{Named, Verify},
     context::Context,
@@ -30,6 +26,13 @@ use pliron::{
     value::Value,
     verify_err,
 };
+use pliron::{
+    builtin::op_interfaces::NRegionsInterface,
+    combine::{
+        Parser,
+        parser::char::{self, spaces},
+    },
+};
 
 use crate::index::types::IndexType;
 
@@ -50,7 +53,7 @@ pub enum YieldOpVerifyErr {
 /// | `results` | variadic of any type |
 #[def_op("cf.yield")]
 #[format_op("operands(CharSpace(`,`))")]
-#[derive_op_interface_impl(ZeroResultInterface, IsTerminatorInterface)]
+#[derive_op_interface_impl(NResultsInterface<0>, IsTerminatorInterface)]
 pub struct YieldOp;
 
 impl YieldOp {
@@ -118,7 +121,7 @@ impl Verify for YieldOp {
 ///   the loop-carried variables. The body should yield the updated loop-carried
 ///   variables at the end of each iteration.
 #[def_op("cf.for")]
-#[derive_op_interface_impl(SingleBlockRegionInterface, OneRegionInterface)]
+#[derive_op_interface_impl(SingleBlockRegionInterface, OneRegionInterface, NRegionsInterface<1>)]
 pub struct ForOp;
 
 impl ForOp {
