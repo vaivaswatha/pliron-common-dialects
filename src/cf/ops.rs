@@ -13,7 +13,7 @@ use pliron::{
     identifier::Identifier,
     irbuild::{
         inserter::{IRInserter, Inserter},
-        listener::InsertionListener,
+        listener::DummyListener,
     },
     irfmt::{
         parsers::{delimited_list_parser, process_parsed_ssa_defs, spaced, ssa_opd_parser},
@@ -128,10 +128,10 @@ impl Verify for YieldOp {
 pub struct ForOp;
 
 /// Type alias for the body builder function used in `ForOp::new`.
-pub type ForOpBodyBuilderFn<State, L> = fn(
+pub type ForOpBodyBuilderFn<State> = fn(
     ctx: &mut Context,
     state: State,
-    inserter: &mut IRInserter<L>,
+    inserter: &mut IRInserter<DummyListener>,
     idx: Value,
     iter_args: &[Value],
 ) -> Vec<Value>;
@@ -145,13 +145,13 @@ impl ForOp {
     ///   - It must return the updated / result loop carried variables of an iteration;
     ///
     /// A [YieldOp] is automatically added at end of the body, taking these results as operands.
-    pub fn new<State, L: InsertionListener>(
+    pub fn new<State>(
         ctx: &mut Context,
         lower_bound: Value,
         upper_bound: Value,
         step: Value,
         iter_args_init: &[Value],
-        body_builder: ForOpBodyBuilderFn<State, L>,
+        body_builder: ForOpBodyBuilderFn<State>,
         body_builder_state: State,
     ) -> Self {
         let index_ty = IndexType::get(ctx);
