@@ -11,7 +11,10 @@ use pliron::{
     debug_info::set_block_arg_name,
     derive::{def_op, derive_op_interface_impl, format_op, op_interface_impl},
     identifier::Identifier,
-    inserter::OpInserter,
+    irbuild::{
+        inserter::{IRInserter, Inserter},
+        listener::InsertionListener,
+    },
     irfmt::{
         parsers::{delimited_list_parser, process_parsed_ssa_defs, spaced, ssa_opd_parser},
         printers::list_with_sep,
@@ -124,6 +127,15 @@ impl Verify for YieldOp {
 #[derive_op_interface_impl(SingleBlockRegionInterface, OneRegionInterface, NRegionsInterface<1>)]
 pub struct ForOp;
 
+/// Type alias for the body builder function used in `ForOp::new`.
+pub type ForOpBodyBuilderFn<State, L> = fn(
+    ctx: &mut Context,
+    state: State,
+    inserter: &mut IRInserter<L>,
+    idx: Value,
+    iter_args: &[Value],
+) -> Vec<Value>;
+
 impl ForOp {
     /// Creates a new `ForOp` with the specified bounds, step and initial loop carried variables.
     ///
@@ -133,20 +145,14 @@ impl ForOp {
     ///   - It must return the updated / result loop carried variables of an iteration;
     ///
     /// A [YieldOp] is automatically added at end of the body, taking these results as operands.
-    pub fn new<T>(
+    pub fn new<State, L: InsertionListener>(
         ctx: &mut Context,
         lower_bound: Value,
         upper_bound: Value,
         step: Value,
         iter_args_init: &[Value],
-        body_builder: fn(
-            ctx: &mut Context,
-            state: T,
-            inserter: &mut OpInserter,
-            idx: Value,
-            iter_args: &[Value],
-        ) -> Vec<Value>,
-        body_builder_state: T,
+        body_builder: ForOpBodyBuilderFn<State, L>,
+        body_builder_state: State,
     ) -> Self {
         let index_ty = IndexType::get(ctx);
         let result_types = iter_args_init
@@ -192,7 +198,7 @@ impl ForOp {
         let entry_block_args = entry_block.deref(ctx).arguments().collect::<Vec<_>>();
         let idx = entry_block_args[0];
         let iter_args = &entry_block_args[1..];
-        let op_inserter = &mut OpInserter::new_at_block_start(entry_block);
+        let op_inserter = &mut IRInserter::new_at_block_start(entry_block);
         let yield_values = body_builder(ctx, body_builder_state, op_inserter, idx, iter_args);
         let yield_op = YieldOp::new(ctx, yield_values);
         op_inserter.append_op(ctx, yield_op);
