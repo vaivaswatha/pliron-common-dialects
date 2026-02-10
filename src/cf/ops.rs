@@ -4,10 +4,9 @@ use pliron::{
     basic_block::BasicBlock,
     builtin::op_interfaces::{
         IsTerminatorInterface, NResultsInterface, OneRegionInterface, OperandSegmentInterface,
-        SingleBlockRegionInterface,
     },
     common_traits::{Named, Verify},
-    context::Context,
+    context::{Context, Ptr},
     debug_info::set_block_arg_name,
     derive::{def_op, derive_op_interface_impl, format_op, op_interface_impl},
     identifier::Identifier,
@@ -19,6 +18,7 @@ use pliron::{
         parsers::{delimited_list_parser, process_parsed_ssa_defs, spaced, ssa_opd_parser},
         printers::list_with_sep,
     },
+    linked_list::ContainsLinkedList,
     location::Location,
     op::{Op, OpObj},
     operation::Operation,
@@ -120,11 +120,12 @@ impl Verify for YieldOp {
 ///
 /// ## Region(s)
 ///   - A single region containing the loop body.
-///   The region takes as arguments the loop induction variable followed by
-///   the loop-carried variables. The body should yield the updated loop-carried
-///   variables at the end of each iteration.
+///   The region takes as entry-block arguments the loop induction variable followed by
+///   the loop-carried variables. The body should `yield`, in its exit block, the updated
+///   loop-carried variables at the end of each iteration. The entry and exit blocks must
+///   be the first and last blocks of the region, respectively.
 #[def_op("cf.for")]
-#[derive_op_interface_impl(SingleBlockRegionInterface, OneRegionInterface, NRegionsInterface<1>)]
+#[derive_op_interface_impl(OneRegionInterface, NRegionsInterface<1>)]
 pub struct ForOp;
 
 /// Type alias for the body builder function used in `ForOp::new`.
@@ -201,7 +202,13 @@ impl ForOp {
         let op_inserter = &mut IRInserter::new_at_block_start(entry_block);
         let yield_values = body_builder(ctx, body_builder_state, op_inserter, idx, iter_args);
         let yield_op = YieldOp::new(ctx, yield_values);
-        op_inserter.append_op(ctx, yield_op);
+        op_inserter.set_insertion_point(pliron::irbuild::inserter::OpInsertionPoint::AtBlockEnd(
+            region
+                .deref(ctx)
+                .get_tail()
+                .expect("Region must have at least one block"),
+        ));
+        op_inserter.insert_op(ctx, yield_op);
         op
     }
 
@@ -235,18 +242,43 @@ impl ForOp {
 
     /// Get the induction variable of the loop.
     pub fn get_induction_variable(&self, ctx: &Context) -> Value {
-        let entry_block = self.get_body(ctx, 0);
-        entry_block.deref(ctx).get_argument(0)
+        self.get_entry(ctx).deref(ctx).get_argument(0)
     }
 
     /// Get the loop carried variables (block arguments).
     pub fn get_loop_carried_variables(&self, ctx: &Context) -> Vec<Value> {
-        let entry_block = self.get_body(ctx, 0);
-        entry_block
+        self.get_entry(ctx)
             .deref(ctx)
             .arguments()
             .skip(1)
             .collect::<Vec<_>>()
+    }
+
+    /// Get the `yield` operation in the loop body.
+    pub fn get_yield(&self, ctx: &Context) -> YieldOp {
+        let exit_block = self.get_exit(ctx);
+        let yield_op = exit_block
+            .deref(ctx)
+            .get_tail()
+            .expect("Block must have at least one operation");
+        Operation::get_op::<YieldOp>(yield_op, ctx)
+            .expect("The last operation in a ForOp exit block must be a YieldOp")
+    }
+
+    /// Get the entry block of the loop body region.
+    pub fn get_entry(&self, ctx: &Context) -> Ptr<BasicBlock> {
+        self.get_region(ctx)
+            .deref(ctx)
+            .get_head()
+            .expect("ForOp region must have at least one block")
+    }
+
+    /// Get the exit block of the loop body region.
+    pub fn get_exit(&self, ctx: &Context) -> Ptr<BasicBlock> {
+        self.get_region(ctx)
+            .deref(ctx)
+            .get_tail()
+            .expect("ForOp region must have at least one block")
     }
 }
 
@@ -313,7 +345,8 @@ impl Parsable for ForOp {
         let opop = ForOp { op };
         opop.set_operand_segment_sizes(state_stream.state.ctx, segments);
 
-        Region::parser(op)
+        spaces()
+            .with(Region::parser(op))
             .parse_stream(state_stream)
             .into_result()?;
 

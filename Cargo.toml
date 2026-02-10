@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 pliron = { git = "https://github.com/vaivaswatha/pliron.git" }
+pliron-llvm = { git = "https://github.com/vaivaswatha/pliron.git" }
 thiserror = "2"
+expect-test = "1"
