@@ -1,14 +1,8 @@
 //! Index type
 
-use pliron::{
-    derive::{def_type, derive_type_get, format_type},
-    impl_verify_succ,
-};
+use pliron::derive::pliron_type;
 
 /// Index type.
+#[pliron_type(name = "index.index", format, generate_get = true, verifier = "succ")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[def_type("index.index")]
-#[derive_type_get]
-#[format_type]
 pub struct IndexType;
-impl_verify_succ!(IndexType);

@@ -7,7 +7,6 @@ use pliron::{
     irbuild::{inserter::Inserter, match_rewrite::MatchRewriter, rewriter::Rewriter},
     op::Op,
     result::Result,
-    r#type::Type,
 };
 use pliron_llvm::{ToLLVMDialect, ToLLVMType, ToLLVMTypeFn, ops::ConstantOp};
 

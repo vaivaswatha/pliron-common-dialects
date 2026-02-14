@@ -8,7 +8,7 @@ use pliron::{
     common_traits::{Named, Verify},
     context::{Context, Ptr},
     debug_info::set_block_arg_name,
-    derive::{def_op, derive_op_interface_impl, format_op, op_interface_impl},
+    derive::pliron_op,
     identifier::Identifier,
     irbuild::{
         inserter::{IRInserter, Inserter},
@@ -54,9 +54,11 @@ pub enum YieldOpVerifyErr {
 /// | operand | description |
 /// |-----|-------|
 /// | `results` | variadic of any type |
-#[def_op("cf.yield")]
-#[format_op("operands(CharSpace(`,`))")]
-#[derive_op_interface_impl(NResultsInterface<0>, IsTerminatorInterface)]
+#[pliron_op(
+    name = "cf.yield",
+    interfaces = [NResultsInterface<0>, IsTerminatorInterface],
+    format = "operands(CharSpace(`,`))",
+)]
 pub struct YieldOp;
 
 impl YieldOp {
@@ -124,8 +126,10 @@ impl Verify for YieldOp {
 ///   the loop-carried variables. The body should `yield`, in its exit block, the updated
 ///   loop-carried variables at the end of each iteration. The entry and exit blocks must
 ///   be the first and last blocks of the region, respectively.
-#[def_op("cf.for")]
-#[derive_op_interface_impl(OneRegionInterface, NRegionsInterface<1>)]
+#[pliron_op(
+    name = "cf.for",
+    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface],
+)]
 pub struct ForOp;
 
 /// Type alias for the body builder function used in `ForOp::new`.
@@ -281,9 +285,6 @@ impl ForOp {
             .expect("ForOp region must have at least one block")
     }
 }
-
-#[op_interface_impl]
-impl OperandSegmentInterface for ForOp {}
 
 impl Printable for ForOp {
     fn fmt(
