@@ -6,6 +6,7 @@ use pliron::irbuild::match_rewrite::MatchRewriter;
 use pliron::op::Op;
 use pliron::{context::Context, result::Result};
 
+pub mod op_interfaces;
 pub mod ops;
 pub mod to_llvm;
 

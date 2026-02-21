@@ -22,7 +22,7 @@ use pliron_llvm::{
     ops::{AddOp, BrOp, CondBrOp, ICmpOp},
 };
 
-use crate::cf::ops::ForOp;
+use crate::cf::{op_interfaces::YieldingRegion, ops::ForOp};
 
 /// Implement [MatchRewrite] for control-flow to LLVM conversion.
 pub struct CFToLLVM;
@@ -207,9 +207,9 @@ mod tests {
               ^entry():
                 llvm.func @test_for: llvm.func <builtin.fp32 () variadic = false> [] {
                   ^entry():
-                    c0 = index.constant <builtin.integer <0: i64>> : index.index;
-                    c10 = index.constant <builtin.integer <10: i64>> : index.index;
-                    c1 = index.constant <builtin.integer <1: i64>> : index.index;
+                    c0 = index.constant <index.constant 0> : index.index;
+                    c10 = index.constant <index.constant 10> : index.index;
+                    c1 = index.constant <index.constant 1> : index.index;
                     init = llvm.constant <builtin.single 1.0> : builtin.fp32;
                     inc = llvm.constant <builtin.single 3.5> : builtin.fp32;
                     

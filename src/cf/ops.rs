@@ -6,12 +6,12 @@ use pliron::{
         IsTerminatorInterface, NResultsInterface, OneRegionInterface, OperandSegmentInterface,
     },
     common_traits::{Named, Verify},
-    context::{Context, Ptr},
+    context::Context,
     debug_info::set_block_arg_name,
     derive::pliron_op,
     identifier::Identifier,
     irbuild::{
-        inserter::{IRInserter, Inserter},
+        inserter::{IRInserter, Inserter, OpInsertionPoint},
         listener::DummyListener,
     },
     irfmt::{
@@ -37,7 +37,7 @@ use pliron::{
     },
 };
 
-use crate::index::types::IndexType;
+use crate::{cf::op_interfaces::YieldingRegion, index::types::IndexType};
 
 #[derive(thiserror::Error, Debug)]
 pub enum YieldOpVerifyErr {
@@ -128,7 +128,7 @@ impl Verify for YieldOp {
 ///   be the first and last blocks of the region, respectively.
 #[pliron_op(
     name = "cf.for",
-    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface],
+    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface, YieldingRegion],
 )]
 pub struct ForOp;
 
@@ -206,7 +206,7 @@ impl ForOp {
         let op_inserter = &mut IRInserter::new_at_block_start(entry_block);
         let yield_values = body_builder(ctx, body_builder_state, op_inserter, idx, iter_args);
         let yield_op = YieldOp::new(ctx, yield_values);
-        op_inserter.set_insertion_point(pliron::irbuild::inserter::OpInsertionPoint::AtBlockEnd(
+        op_inserter.set_insertion_point(OpInsertionPoint::AtBlockEnd(
             region
                 .deref(ctx)
                 .get_tail()
@@ -256,33 +256,6 @@ impl ForOp {
             .arguments()
             .skip(1)
             .collect::<Vec<_>>()
-    }
-
-    /// Get the `yield` operation in the loop body.
-    pub fn get_yield(&self, ctx: &Context) -> YieldOp {
-        let exit_block = self.get_exit(ctx);
-        let yield_op = exit_block
-            .deref(ctx)
-            .get_tail()
-            .expect("Block must have at least one operation");
-        Operation::get_op::<YieldOp>(yield_op, ctx)
-            .expect("The last operation in a ForOp exit block must be a YieldOp")
-    }
-
-    /// Get the entry block of the loop body region.
-    pub fn get_entry(&self, ctx: &Context) -> Ptr<BasicBlock> {
-        self.get_region(ctx)
-            .deref(ctx)
-            .get_head()
-            .expect("ForOp region must have at least one block")
-    }
-
-    /// Get the exit block of the loop body region.
-    pub fn get_exit(&self, ctx: &Context) -> Ptr<BasicBlock> {
-        self.get_region(ctx)
-            .deref(ctx)
-            .get_tail()
-            .expect("ForOp region must have at least one block")
     }
 }
 
