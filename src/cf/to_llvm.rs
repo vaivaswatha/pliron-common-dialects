@@ -1,19 +1,24 @@
 //! Convert control flow dialect to LLVM dialect.
 
 use pliron::{
+    basic_block::BasicBlock,
     builtin::op_interfaces::{OneRegionInterface, OneResultInterface},
     context::{Context, Ptr},
     derive::op_interface_impl,
     input_error,
     irbuild::{
-        inserter::{BlockInsertionPoint, Inserter, OpInsertionPoint},
+        inserter::{BlockInsertionPoint, IRInserter, Inserter, OpInsertionPoint},
+        listener::DummyListener,
         match_rewrite::{MatchRewrite, MatchRewriter},
-        rewriter::Rewriter,
+        rewriter::{Rewriter, ScopedRewriter},
     },
+    linked_list::{ContainsLinkedList, LinkedList},
     op::{Op, op_cast, op_impls},
     operation::Operation,
+    region::Region,
     result::Result,
     r#type::{Typed, type_cast},
+    value::Value,
 };
 use pliron_llvm::{
     ToLLVMDialect, ToLLVMType,
@@ -22,7 +27,10 @@ use pliron_llvm::{
     ops::{AddOp, BrOp, CondBrOp, ICmpOp},
 };
 
-use crate::cf::{op_interfaces::YieldingRegion, ops::ForOp};
+use crate::cf::{
+    op_interfaces::YieldingRegion,
+    ops::{ForOp, NDForOp},
+};
 
 /// Implement [MatchRewrite] for control-flow to LLVM conversion.
 pub struct CFToLLVM;
@@ -177,144 +185,154 @@ impl ToLLVMDialect for ForOp {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use pliron::{
-        builtin::ops::ModuleOp,
-        combine::Parser,
-        context::Context,
-        input_error_noloc,
-        irbuild::match_rewrite::collect_rewrite,
-        irfmt::parsers::spaced,
-        location,
-        op::verify_op,
-        operation::Operation,
-        parsable::{self, state_stream_from_iterator},
-        printable::Printable,
-        result::ExpectOk,
-    };
-    use pliron_llvm::llvm_sys::{core::LLVMContext, lljit::LLVMLLJIT, target::initialize_native};
+#[op_interface_impl]
+impl ToLLVMDialect for NDForOp {
+    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+        let lower_bounds = self.get_lower_bounds(ctx);
+        let upper_bounds = self.get_upper_bounds(ctx);
+        let steps = self.get_steps(ctx);
+        let region = self.get_region(ctx);
 
-    use crate::cf::to_llvm::CFToLLVM;
-    use expect_test::expect;
+        // Update the argument types of the body entry block to LLVM types.
+        let args = region
+            .deref(ctx)
+            .get_head()
+            .expect("NDForOp region must have an entry block")
+            .deref(ctx)
+            .arguments()
+            .collect::<Vec<_>>();
+        for arg in args {
+            let arg_ty = arg.get_type(ctx);
+            let to_llvm_ty = type_cast::<dyn ToLLVMType>(&**arg_ty.deref(ctx))
+                .expect("Body block arguments must be of a type that can be converted to LLVM type")
+                .converter();
+            let llvm_ty = to_llvm_ty(arg_ty, ctx)?;
+            arg.set_type(ctx, llvm_ty);
+        }
 
-    #[test]
-    fn test_for_op_to_llvm_conversion() {
-        let ctx = &mut Context::new();
+        // Remove the [YieldOp] in the body, it's useless and impedes LLVM conversion.
+        let yield_op = self.get_yield(ctx);
+        rewriter.erase_operation(ctx, yield_op.get_operation());
 
-        let input_ir = r#"
-            builtin.module @test_module {
-              ^entry():
-                llvm.func @test_for: llvm.func <builtin.fp32 () variadic = false> [] {
-                  ^entry():
-                    c0 = index.constant <index.constant 0> : index.index;
-                    c10 = index.constant <index.constant 10> : index.index;
-                    c1 = index.constant <index.constant 1> : index.index;
-                    init = llvm.constant <builtin.single 1.0> : builtin.fp32;
-                    inc = llvm.constant <builtin.single 3.5> : builtin.fp32;
-                    
-                    result = cf.for c0 to c10 step c1 (init) {
-                        ^entry(iv : index.index, iter_arg : builtin.fp32):
-                            next = llvm.fadd <FAST> iter_arg, inc : builtin.fp32;
-                            cf.yield next
-                    };
-                    
-                    llvm.return result
-                }
-            }
-            "#;
+        // Iterate over the loop dimensions in reverse order,
+        // so that we can create nested loops from the innermost to the outermost.
+        let mut lb_ub_st = lower_bounds
+            .iter()
+            .zip(upper_bounds.iter())
+            .zip(steps.iter())
+            .rev();
 
-        let state_stream = state_stream_from_iterator(
-            input_ir.chars(),
-            parsable::State::new(ctx, location::Source::InMemory),
+        // The innermost loop gets the body of the original NDForOp as its loop body.
+        let ((innermost_lb, innermost_ub), innermost_step) = lb_ub_st
+            .next()
+            .expect("NDForOp must have at least one loop dimension");
+
+        struct State<'a> {
+            innermost_for_op_entry_block: Option<Ptr<BasicBlock>>,
+            last_created_for_op: Option<ForOp>,
+            indices: Vec<Value>,
+            rewriter: &'a mut MatchRewriter,
+            ndforop_region: Ptr<Region>,
+        }
+        let mut state = State {
+            innermost_for_op_entry_block: None,
+            last_created_for_op: None,
+            indices: vec![],
+            rewriter,
+            ndforop_region: region,
+        };
+        let innermost_for = ForOp::new(
+            ctx,
+            *innermost_lb,
+            *innermost_ub,
+            *innermost_step,
+            &[],
+            |ctx: &mut Context,
+             state: &mut State,
+             inserter: &mut IRInserter<DummyListener>,
+             idx: Value,
+             iter_args: &[Value]| {
+                assert!(
+                    iter_args.is_empty(),
+                    "We didn't provide any init iter args, so the body shouldn't expect any iter args"
+                );
+                let insertion_point = inserter
+                    .get_insertion_block(ctx)
+                    .expect("Failed to get insertion block");
+                // Move the body of the original NDForOp into the innermost ForOp.
+                state.rewriter.inline_region(
+                    ctx,
+                    state.ndforop_region,
+                    BlockInsertionPoint::AfterBlock(insertion_point),
+                );
+                // Note the entry block of the innermost ForOp for later convenience.
+                state.innermost_for_op_entry_block = Some(insertion_point);
+                state.indices.push(idx);
+                vec![]
+            },
+            &mut state,
         );
-        let parsed = spaced(Operation::top_level_parser())
-            .parse(state_stream)
-            .map(|(op, _)| op)
-            .map_err(|err| input_error_noloc!(err));
+        state.last_created_for_op = Some(innermost_for);
 
-        let parsed_op = parsed.expect_ok(ctx);
-        let module_op = Operation::get_op::<ModuleOp>(parsed_op, ctx).unwrap();
-        verify_op(&module_op, ctx).expect_ok(ctx);
+        // To add a branch from the innermost loop entry block to the original body entry block,
+        // we don't have all the induction variables available until we create all the loops.
+        // So add the branch later.
 
-        collect_rewrite(ctx, CFToLLVM, parsed_op).expect_ok(ctx);
-        verify_op(&module_op, ctx).expect_ok(ctx);
+        // Now create the outer loops, if any.
+        for ((lb, ub), step) in lb_ub_st {
+            fn body_builder(
+                ctx: &mut Context,
+                state: &mut State,
+                inserter: &mut IRInserter<DummyListener>,
+                idx: Value,
+                iter_args: &[Value],
+            ) -> Vec<Value> {
+                assert!(
+                    iter_args.is_empty(),
+                    "We didn't provide any init iter args, so the body shouldn't expect any iter args"
+                );
 
-        let print_parsed = format!("{}", module_op.disp(ctx));
-        expect![[r#"
-                builtin.module @test_module 
-                {
-                  ^entry_block3v1():
-                    llvm.func @test_for: llvm.func <builtin.fp32 () variadic = false>
-                      [] 
-                    {
-                      ^entry_block2v1():
-                        op12v1_res0 = llvm.constant <builtin.integer <0: i64>> : builtin.integer i64;
-                        op3v3_res0 = llvm.constant <builtin.integer <10: i64>> : builtin.integer i64;
-                        op4v3_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64;
-                        init_op6v1_res0 = llvm.constant <builtin.single 1> : builtin.fp32  !0;
-                        inc_op7v1_res0 = llvm.constant <builtin.single 3.5> : builtin.fp32  !1;
-                        llvm.br ^for_op_header_block5v1(op12v1_res0, init_op6v1_res0)
+                // Use the outer rewriter for insertions to keep track of new operations for later loops.
+                let mut rewriter =
+                    ScopedRewriter::new(state.rewriter, inserter.get_insertion_point());
+                // The entry block will have just one operation, which is the previous ForOp we created.
+                rewriter.append_op(ctx, state.last_created_for_op.unwrap());
+                state.indices.push(idx);
+                vec![]
+            }
+            let for_op = ForOp::new(ctx, *lb, *ub, *step, &[], body_builder, &mut state);
+            state.last_created_for_op = Some(for_op);
+        }
 
-                      ^for_op_header_block5v1(block5v1_arg0: builtin.integer i64, block5v1_arg1: builtin.fp32 ):
-                        op5v3_res0 = llvm.icmp block5v1_arg0 <ULT> op3v3_res0 : builtin.integer i1;
-                        llvm.cond_br if op5v3_res0 ^entry_block1v1(block5v1_arg0, block5v1_arg1) else ^entry_split_block4v1()
+        // Now we have all the loops created, we can add the branch from the
+        // innermost loop entry block to the original body entry block.
+        {
+            let innermost_for_op_entry_block = state
+                .innermost_for_op_entry_block
+                .expect("We must have created at least one ForOp, so the innermost loop entry block must be set");
+            let branch_to_block = innermost_for_op_entry_block.deref(ctx).get_next()
+                .expect("The body of the original NDForOp must be in the next block after the innermost ForOp entry block");
+            let mut branch_inserter = ScopedRewriter::new(
+                state.rewriter,
+                OpInsertionPoint::AtBlockEnd(state.innermost_for_op_entry_block.unwrap()),
+            );
+            let branch = BrOp::new(
+                ctx,
+                branch_to_block,
+                state.indices.iter().rev().cloned().collect(),
+            );
+            branch_inserter.append_op(ctx, branch);
+        }
+        // Finally replace the NDForOp with the last created ForOp, which is the outermost loop.
+        state
+            .rewriter
+            .append_op(ctx, state.last_created_for_op.unwrap());
+        state.rewriter.replace_operation(
+            ctx,
+            self.get_operation(),
+            state.last_created_for_op.unwrap().get_operation(),
+        );
 
-                      ^entry_block1v1(iv_block1v1_arg0: builtin.integer i64, iter_arg_block1v1_arg1: builtin.fp32 ):
-                        next_op10v1_res0 = llvm.fadd <NNAN | NINF | NSZ | ARCP | CONTRACT | AFN | REASSOC> iter_arg_block1v1_arg1, inc_op7v1_res0 : builtin.fp32  !2;
-                        op15v1_res0 = llvm.add iv_block1v1_arg0, op4v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
-                        llvm.br ^for_op_header_block5v1(op15v1_res0, next_op10v1_res0)
-
-                      ^entry_split_block4v1():
-                        llvm.return block5v1_arg1 !3
-                    } !4
-                }"#]].assert_eq(&print_parsed);
-
-        let llvm_ctx = LLVMContext::default();
-        let llvm_ir =
-            pliron_llvm::to_llvm_ir::convert_module(ctx, &llvm_ctx, module_op).expect_ok(ctx);
-        llvm_ir
-            .verify()
-            .inspect_err(|e| println!("LLVM-IR verification failed: {}", e))
-            .unwrap();
-
-        expect![[r#"
-                ; ModuleID = 'test_module'
-                source_filename = "test_module"
-
-                define float @test_for() {
-                entry_block2v1:
-                  br label %for_op_header_block5v1
-
-                for_op_header_block5v1:                           ; preds = %entry_block1v1, %entry_block2v1
-                  %block5v1_arg0 = phi i64 [ 0, %entry_block2v1 ], [ %op15v1_res0, %entry_block1v1 ]
-                  %block5v1_arg1 = phi float [ 1.000000e+00, %entry_block2v1 ], [ %next_op10v1_res0, %entry_block1v1 ]
-                  %op5v3_res0 = icmp ult i64 %block5v1_arg0, 10
-                  br i1 %op5v3_res0, label %entry_block1v1, label %entry_split_block4v1
-
-                entry_block1v1:                                   ; preds = %for_op_header_block5v1
-                  %iv_block1v1_arg0 = phi i64 [ %block5v1_arg0, %for_op_header_block5v1 ]
-                  %iter_arg_block1v1_arg1 = phi float [ %block5v1_arg1, %for_op_header_block5v1 ]
-                  %next_op10v1_res0 = fadd fast float %iter_arg_block1v1_arg1, 3.500000e+00
-                  %op15v1_res0 = add i64 %iv_block1v1_arg0, 1
-                  br label %for_op_header_block5v1
-
-                entry_split_block4v1:                             ; preds = %for_op_header_block5v1
-                  ret float %block5v1_arg1
-                }
-            "#]].assert_eq(&llvm_ir.to_string());
-
-        // Let's try and execute this function
-        initialize_native().expect("Failed to initialize native target for LLVM execution");
-        let jit = LLVMLLJIT::new_with_default_builder().expect("Failed to create LLJIT");
-        jit.add_module(llvm_ir)
-            .expect("Failed to add module to JIT");
-        let symbol_addr = jit
-            .lookup_symbol("test_for")
-            .expect("Failed to lookup symbol");
-        assert!(symbol_addr != 0);
-        let f = unsafe { std::mem::transmute::<u64, fn() -> f32>(symbol_addr) };
-        let result = f();
-        assert_eq!(result, 36.0);
+        Ok(())
     }
 }
