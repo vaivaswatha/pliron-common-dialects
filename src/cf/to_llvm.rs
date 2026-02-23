@@ -280,27 +280,33 @@ impl ToLLVMDialect for NDForOp {
 
         // Now create the outer loops, if any.
         for ((lb, ub), step) in lb_ub_st {
-            fn body_builder(
-                ctx: &mut Context,
-                state: &mut State,
-                inserter: &mut IRInserter<DummyListener>,
-                idx: Value,
-                iter_args: &[Value],
-            ) -> Vec<Value> {
-                assert!(
-                    iter_args.is_empty(),
-                    "We didn't provide any init iter args, so the body shouldn't expect any iter args"
-                );
+            let for_op = ForOp::new(
+                ctx,
+                *lb,
+                *ub,
+                *step,
+                &[],
+                |ctx: &mut Context,
+                 state: &mut State,
+                 inserter: &mut IRInserter<DummyListener>,
+                 idx: Value,
+                 iter_args: &[Value]|
+                 -> Vec<Value> {
+                    assert!(
+                        iter_args.is_empty(),
+                        "We didn't provide any init iter args, so the body shouldn't expect any iter args"
+                    );
 
-                // Use the outer rewriter for insertions to keep track of new operations for later loops.
-                let mut rewriter =
-                    ScopedRewriter::new(state.rewriter, inserter.get_insertion_point());
-                // The entry block will have just one operation, which is the previous ForOp we created.
-                rewriter.append_op(ctx, state.last_created_for_op.unwrap());
-                state.indices.push(idx);
-                vec![]
-            }
-            let for_op = ForOp::new(ctx, *lb, *ub, *step, &[], body_builder, &mut state);
+                    // Use the outer rewriter for insertions to keep track of new operations for later loops.
+                    let mut rewriter =
+                        ScopedRewriter::new(state.rewriter, inserter.get_insertion_point());
+                    // The entry block will have just one operation, which is the previous ForOp we created.
+                    rewriter.append_op(ctx, state.last_created_for_op.unwrap());
+                    state.indices.push(idx);
+                    vec![]
+                },
+                &mut state,
+            );
             state.last_created_for_op = Some(for_op);
         }
 
