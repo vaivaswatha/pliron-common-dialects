@@ -38,7 +38,10 @@ use pliron::{
     },
 };
 
-use crate::{cf::op_interfaces::YieldingRegion, index::types::IndexType};
+use crate::{
+    cf::op_interfaces::{YieldingOp, YieldingRegion},
+    index::types::IndexType,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum YieldOpVerifyErr {
@@ -57,7 +60,7 @@ pub enum YieldOpVerifyErr {
 /// | `results` | variadic of any type |
 #[pliron_op(
     name = "cf.yield",
-    interfaces = [NResultsInterface<0>, IsTerminatorInterface],
+    interfaces = [NResultsInterface<0>, IsTerminatorInterface, YieldingOp],
     format = "operands(CharSpace(`,`))",
 )]
 pub struct YieldOp;
@@ -129,7 +132,7 @@ impl Verify for YieldOp {
 ///   be the first and last blocks of the region, respectively.
 #[pliron_op(
     name = "cf.for",
-    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface, YieldingRegion],
+    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface, YieldingRegion<YieldOp>],
 )]
 pub struct ForOp;
 
@@ -411,7 +414,7 @@ pub type NDForOpBodyBuilderFn<State> = fn(
 ///   respectively. The exit block must [YieldOp] with no operands.
 #[pliron_op(
     name = "cf.nd_for",
-    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface, YieldingRegion],
+    interfaces = [OneRegionInterface, NRegionsInterface<1>, OperandSegmentInterface, YieldingRegion<YieldOp>],
 )]
 pub struct NDForOp;
 

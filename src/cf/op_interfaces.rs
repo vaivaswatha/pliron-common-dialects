@@ -2,7 +2,7 @@
 
 use pliron::{
     basic_block::BasicBlock,
-    builtin::op_interfaces::OneRegionInterface,
+    builtin::op_interfaces::{IsTerminatorInterface, OneRegionInterface},
     context::{Context, Ptr},
     derive::op_interface,
     linked_list::ContainsLinkedList,
@@ -12,23 +12,32 @@ use pliron::{
     verify_err,
 };
 
-use crate::cf::ops::YieldOp;
+/// An [Operation] that can be yielded to from a [YieldingRegion].
+#[op_interface]
+pub trait YieldingOp: IsTerminatorInterface {
+    fn verify(_op: &dyn Op, _ctx: &Context) -> Result<()>
+    where
+        Self: Sized,
+    {
+        Ok(())
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum YieldingRegionVerifyErr {
     #[error("Region is empty")]
     RegionEmpty,
-    #[error("Last operation in exit block is not a YieldOp")]
+    #[error("Last operation in exit block is not a YieldingOp")]
     LastOpNotYield,
 }
 
 /// An [Operation] with a single [Region](pliron::region::Region) that
 /// 1. Has an entry (lexicographically first) and an exit (lexicographically last) block.
-/// 2. The exit block must end with a [YieldOp].
+/// 2. The exit block must end with a [YieldingOp].
 ///
 /// The entry and exit blocks can be the same block.
 #[op_interface]
-pub trait YieldingRegion: OneRegionInterface {
+pub trait YieldingRegion<YieldOp: YieldingOp>: OneRegionInterface {
     /// Get the `yield` operation in the loop body.
     fn get_yield(&self, ctx: &Context) -> YieldOp {
         let exit_block = self.get_exit(ctx);
@@ -60,7 +69,8 @@ pub trait YieldingRegion: OneRegionInterface {
     where
         Self: Sized,
     {
-        let op = op_cast::<dyn YieldingRegion>(op).expect("Expected a YieldingRegion operation");
+        let op = op_cast::<dyn YieldingRegion<YieldOp>>(op)
+            .expect("Expected a YieldingRegion operation");
         let region = op.get_region(ctx).deref(ctx);
 
         if region.get_head().is_none() {
