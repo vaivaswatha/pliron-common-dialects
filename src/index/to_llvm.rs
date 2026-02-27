@@ -4,6 +4,7 @@ use pliron::{
     attribute::AttrObj,
     builtin::{
         attributes::IntegerAttr,
+        op_interfaces::OneOpdInterface,
         types::{IntegerType, Signedness},
     },
     context::Context,
@@ -15,7 +16,11 @@ use pliron::{
 };
 use pliron_llvm::{ToLLVMDialect, ToLLVMType, ToLLVMTypeFn, ops::ConstantOp};
 
-use crate::index::{attributes::ConstantIndexAttr, ops::IndexConstantOp, types::IndexType};
+use crate::index::{
+    attributes::ConstantIndexAttr,
+    ops::{IndexConstantOp, IndexToIntegerOp, IntegerToIndexOp},
+    types::IndexType,
+};
 
 #[type_interface_impl]
 impl ToLLVMType for IndexType {
@@ -39,6 +44,24 @@ impl ToLLVMDialect for IndexConstantOp {
         let new_constant_op = ConstantOp::new(ctx, llvm_attr);
         rewriter.insert_op(ctx, new_constant_op);
         rewriter.replace_operation(ctx, self.get_operation(), new_constant_op.get_operation());
+        Ok(())
+    }
+}
+
+#[op_interface_impl]
+impl ToLLVMDialect for IndexToIntegerOp {
+    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+        let index_op = self.get_operand(ctx);
+        rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![index_op]);
+        Ok(())
+    }
+}
+
+#[op_interface_impl]
+impl ToLLVMDialect for IntegerToIndexOp {
+    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+        let int_op = self.get_operand(ctx);
+        rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![int_op]);
         Ok(())
     }
 }

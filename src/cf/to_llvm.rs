@@ -185,6 +185,12 @@ impl ToLLVMDialect for ForOp {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum NDForOpConversionErr {
+    #[error("Unsupported induction variable type for NDForOp conversion")]
+    UnsupportedIVType,
+}
+
 #[op_interface_impl]
 impl ToLLVMDialect for NDForOp {
     fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
@@ -204,7 +210,7 @@ impl ToLLVMDialect for NDForOp {
         for arg in args {
             let arg_ty = arg.get_type(ctx);
             let to_llvm_ty = type_cast::<dyn ToLLVMType>(&**arg_ty.deref(ctx))
-                .expect("Body block arguments must be of a type that can be converted to LLVM type")
+                .ok_or_else(|| input_error!(arg.loc(ctx), NDForOpConversionErr::UnsupportedIVType))?
                 .converter();
             let llvm_ty = to_llvm_ty(arg_ty, ctx)?;
             arg.set_type(ctx, llvm_ty);
