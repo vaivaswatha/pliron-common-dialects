@@ -153,10 +153,7 @@ impl ToLLVMDialect for ForOp {
             ctx,
             for_body_entry_iv,
             step,
-            IntegerOverflowFlagsAttr {
-                nsw: false,
-                nuw: false,
-            },
+            IntegerOverflowFlagsAttr::default(),
         );
         rewriter.append_op(ctx, iv_next);
         let branch_operands: Vec<_> = std::iter::once(iv_next.get_result(ctx))
