@@ -6,7 +6,7 @@ use pliron::{
     combine::Parser,
     context::Context,
     input_error_noloc,
-    irbuild::match_rewrite::collect_rewrite,
+    irbuild::dialect_conversion::apply_dialect_conversion,
     irfmt::parsers::spaced,
     location,
     op::verify_op,
@@ -59,7 +59,7 @@ fn test_for_op_to_llvm_conversion() {
     let module_op = Operation::get_op::<ModuleOp>(parsed_op, ctx).unwrap();
     verify_op(&module_op, ctx).expect_ok(ctx);
 
-    collect_rewrite(ctx, CFToLLVM, parsed_op).expect_ok(ctx);
+    apply_dialect_conversion(ctx, &mut CFToLLVM, parsed_op).expect_ok(ctx);
     verify_op(&module_op, ctx).expect_ok(ctx);
 
     let print_parsed = format!("{}", module_op.disp(ctx));
@@ -186,7 +186,7 @@ fn test_ndfor_op_to_llvm_conversion() {
     let module_op = Operation::get_op::<ModuleOp>(parsed_op, ctx).unwrap();
     verify_op(&module_op, ctx).expect_ok(ctx);
 
-    collect_rewrite(ctx, CFToLLVM, parsed_op).expect_ok(ctx);
+    apply_dialect_conversion(ctx, &mut CFToLLVM, parsed_op).expect_ok(ctx);
     verify_op(&module_op, ctx).expect_ok(ctx);
 
     let print_parsed = format!("{}", module_op.disp(ctx));

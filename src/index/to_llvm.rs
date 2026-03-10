@@ -9,7 +9,11 @@ use pliron::{
     },
     context::Context,
     derive::{op_interface_impl, type_interface_impl},
-    irbuild::{inserter::Inserter, match_rewrite::MatchRewriter, rewriter::Rewriter},
+    irbuild::{
+        dialect_conversion::{DialectConversionRewriter, OperandConversionInfo},
+        inserter::Inserter,
+        rewriter::Rewriter,
+    },
     op::Op,
     result::Result,
     utils::apint::APInt,
@@ -35,7 +39,12 @@ impl ToLLVMType for IndexType {
 
 #[op_interface_impl]
 impl ToLLVMDialect for IndexConstantOp {
-    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+    fn rewrite(
+        &self,
+        ctx: &mut Context,
+        rewriter: &mut DialectConversionRewriter,
+        _operand_info: &[OperandConversionInfo],
+    ) -> Result<()> {
         let constant_index = self
             .get_attr_constant_index(ctx)
             .expect("Missing value attribute")
@@ -50,7 +59,12 @@ impl ToLLVMDialect for IndexConstantOp {
 
 #[op_interface_impl]
 impl ToLLVMDialect for IndexToIntegerOp {
-    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+    fn rewrite(
+        &self,
+        ctx: &mut Context,
+        rewriter: &mut DialectConversionRewriter,
+        _operand_info: &[OperandConversionInfo],
+    ) -> Result<()> {
         let index_op = self.get_operand(ctx);
         rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![index_op]);
         Ok(())
@@ -59,7 +73,12 @@ impl ToLLVMDialect for IndexToIntegerOp {
 
 #[op_interface_impl]
 impl ToLLVMDialect for IntegerToIndexOp {
-    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+    fn rewrite(
+        &self,
+        ctx: &mut Context,
+        rewriter: &mut DialectConversionRewriter,
+        _operand_info: &[OperandConversionInfo],
+    ) -> Result<()> {
         let int_op = self.get_operand(ctx);
         rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![int_op]);
         Ok(())

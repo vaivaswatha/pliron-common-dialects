@@ -7,17 +7,18 @@ use pliron::{
     derive::op_interface_impl,
     input_error,
     irbuild::{
+        dialect_conversion::{DialectConversion, DialectConversionRewriter, OperandConversionInfo},
         inserter::{BlockInsertionPoint, IRInserter, Inserter, OpInsertionPoint},
         listener::DummyListener,
-        match_rewrite::{MatchRewrite, MatchRewriter},
+        match_rewrite::MatchRewriter,
         rewriter::{Rewriter, ScopedRewriter},
     },
-    linked_list::{ContainsLinkedList, LinkedList},
+    linked_list::LinkedList,
     op::{Op, op_cast, op_impls},
     operation::Operation,
     region::Region,
     result::Result,
-    r#type::{Typed, type_cast},
+    r#type::{TypeObj, Typed, type_cast},
     value::Value,
 };
 use pliron_llvm::{
@@ -32,24 +33,36 @@ use crate::cf::{
     ops::{ForOp, NDForOp},
 };
 
-/// Implement [MatchRewrite] for control-flow to LLVM conversion.
+/// Implement [DialectConversion] for control-flow to LLVM conversion.
 pub struct CFToLLVM;
 
-impl MatchRewrite for CFToLLVM {
-    fn r#match(&mut self, ctx: &Context, op: Ptr<Operation>) -> bool {
+impl DialectConversion for CFToLLVM {
+    fn can_convert_op(&mut self, ctx: &Context, op: Ptr<Operation>) -> bool {
         op_impls::<dyn ToLLVMDialect>(&*Operation::get_op_dyn(op, ctx))
+    }
+
+    fn can_convert_type(&mut self, ctx: &Context, ty: Ptr<TypeObj>) -> bool {
+        type_cast::<dyn ToLLVMType>(&**ty.deref(ctx)).is_some()
+    }
+
+    fn convert_type(&mut self, ctx: &mut Context, ty: Ptr<TypeObj>) -> Result<Ptr<TypeObj>> {
+        let to_llvm_ty = type_cast::<dyn ToLLVMType>(&**ty.deref(ctx))
+            .expect("Type with can_convert_type=true must implement ToLLVMType")
+            .converter();
+        to_llvm_ty(ty, ctx)
     }
 
     fn rewrite(
         &mut self,
         ctx: &mut Context,
-        rewriter: &mut MatchRewriter,
+        rewriter: &mut DialectConversionRewriter,
         op: Ptr<Operation>,
+        operand_info: &[OperandConversionInfo],
     ) -> Result<()> {
         let op_dyn = Operation::get_op_dyn(op, ctx);
         let to_llvm_op = op_cast::<dyn ToLLVMDialect>(&*op_dyn)
             .expect("Matched Op must implement ToLLVMDialect");
-        to_llvm_op.rewrite(ctx, rewriter)
+        to_llvm_op.rewrite(ctx, rewriter, operand_info)
     }
 }
 
@@ -80,7 +93,12 @@ pub enum ForOpConversionErr {
 //     <code after ForOp>
 #[op_interface_impl]
 impl ToLLVMDialect for ForOp {
-    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+    fn rewrite(
+        &self,
+        ctx: &mut Context,
+        rewriter: &mut DialectConversionRewriter,
+        _operand_info: &[OperandConversionInfo],
+    ) -> Result<()> {
         let lower_bound = self.get_lower_bound(ctx);
         let upper_bound = self.get_upper_bound(ctx);
         let step = self.get_step(ctx);
@@ -104,7 +122,7 @@ impl ToLLVMDialect for ForOp {
             .converter();
         let iv_ty = to_llvm_ty(iv_ty, ctx)?;
         // We change the type of the induction variable to an LLVM integer type.
-        iv.set_type(ctx, iv_ty);
+        rewriter.set_value_type(ctx, iv, iv_ty);
 
         // We don't convert iter_var_types here because they are just passed
         // through the header without any operations on them. They will be converted
@@ -190,28 +208,16 @@ pub enum NDForOpConversionErr {
 
 #[op_interface_impl]
 impl ToLLVMDialect for NDForOp {
-    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()> {
+    fn rewrite(
+        &self,
+        ctx: &mut Context,
+        rewriter: &mut DialectConversionRewriter,
+        _operand_info: &[OperandConversionInfo],
+    ) -> Result<()> {
         let lower_bounds = self.get_lower_bounds(ctx);
         let upper_bounds = self.get_upper_bounds(ctx);
         let steps = self.get_steps(ctx);
         let region = self.get_region(ctx);
-
-        // Update the argument types of the body entry block to LLVM types.
-        let args = region
-            .deref(ctx)
-            .get_head()
-            .expect("NDForOp region must have an entry block")
-            .deref(ctx)
-            .arguments()
-            .collect::<Vec<_>>();
-        for arg in args {
-            let arg_ty = arg.get_type(ctx);
-            let to_llvm_ty = type_cast::<dyn ToLLVMType>(&**arg_ty.deref(ctx))
-                .ok_or_else(|| input_error!(arg.loc(ctx), NDForOpConversionErr::UnsupportedIVType))?
-                .converter();
-            let llvm_ty = to_llvm_ty(arg_ty, ctx)?;
-            arg.set_type(ctx, llvm_ty);
-        }
 
         // Remove the [YieldOp] in the body, it's useless and impedes LLVM conversion.
         let yield_op = self.get_yield(ctx);

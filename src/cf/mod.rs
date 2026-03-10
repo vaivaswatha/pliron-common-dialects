@@ -2,7 +2,7 @@
 
 use pliron::derive::op_interface;
 
-use pliron::irbuild::match_rewrite::MatchRewriter;
+use pliron::irbuild::dialect_conversion::{DialectConversionRewriter, OperandConversionInfo};
 use pliron::op::Op;
 use pliron::{context::Context, result::Result};
 
@@ -14,7 +14,12 @@ pub mod to_llvm;
 #[op_interface]
 pub trait ToCFDialect {
     /// Rewrite [self] to CF dialect.
-    fn rewrite(&self, ctx: &mut Context, rewriter: &mut MatchRewriter) -> Result<()>;
+    fn rewrite(
+        &self,
+        ctx: &mut Context,
+        rewriter: &mut DialectConversionRewriter,
+        operand_info: &[OperandConversionInfo],
+    ) -> Result<()>;
 
     fn verify(_op: &dyn Op, _ctx: &Context) -> Result<()>
     where
