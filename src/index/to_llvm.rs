@@ -10,7 +10,7 @@ use pliron::{
     context::Context,
     derive::{op_interface_impl, type_interface_impl},
     irbuild::{
-        dialect_conversion::{DialectConversionRewriter, OperandConversionInfo},
+        dialect_conversion::{DialectConversionRewriter, OperandsInfo},
         inserter::Inserter,
         rewriter::Rewriter,
     },
@@ -43,7 +43,7 @@ impl ToLLVMDialect for IndexConstantOp {
         &self,
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
-        _operand_info: &[OperandConversionInfo],
+        _operands_info: &OperandsInfo,
     ) -> Result<()> {
         let constant_index = self
             .get_attr_constant_index(ctx)
@@ -63,7 +63,7 @@ impl ToLLVMDialect for IndexToIntegerOp {
         &self,
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
-        _operand_info: &[OperandConversionInfo],
+        _operands_info: &OperandsInfo,
     ) -> Result<()> {
         let index_op = self.get_operand(ctx);
         rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![index_op]);
@@ -77,7 +77,7 @@ impl ToLLVMDialect for IntegerToIndexOp {
         &self,
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
-        _operand_info: &[OperandConversionInfo],
+        _operands_info: &OperandsInfo,
     ) -> Result<()> {
         let int_op = self.get_operand(ctx);
         rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![int_op]);

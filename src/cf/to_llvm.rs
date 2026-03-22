@@ -7,7 +7,7 @@ use pliron::{
     derive::op_interface_impl,
     input_error,
     irbuild::{
-        dialect_conversion::{DialectConversion, DialectConversionRewriter, OperandConversionInfo},
+        dialect_conversion::{DialectConversion, DialectConversionRewriter, OperandsInfo},
         inserter::{BlockInsertionPoint, IRInserter, Inserter, OpInsertionPoint},
         listener::DummyListener,
         match_rewrite::MatchRewriter,
@@ -57,12 +57,12 @@ impl DialectConversion for CFToLLVM {
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
         op: Ptr<Operation>,
-        operand_info: &[OperandConversionInfo],
+        operands_info: &OperandsInfo,
     ) -> Result<()> {
         let op_dyn = Operation::get_op_dyn(op, ctx);
         let to_llvm_op = op_cast::<dyn ToLLVMDialect>(&*op_dyn)
             .expect("Matched Op must implement ToLLVMDialect");
-        to_llvm_op.rewrite(ctx, rewriter, operand_info)
+        to_llvm_op.rewrite(ctx, rewriter, operands_info)
     }
 }
 
@@ -97,7 +97,7 @@ impl ToLLVMDialect for ForOp {
         &self,
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
-        _operand_info: &[OperandConversionInfo],
+        _operands_info: &OperandsInfo,
     ) -> Result<()> {
         let lower_bound = self.get_lower_bound(ctx);
         let upper_bound = self.get_upper_bound(ctx);
@@ -212,7 +212,7 @@ impl ToLLVMDialect for NDForOp {
         &self,
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
-        _operand_info: &[OperandConversionInfo],
+        _operands_info: &OperandsInfo,
     ) -> Result<()> {
         let lower_bounds = self.get_lower_bounds(ctx);
         let upper_bounds = self.get_upper_bounds(ctx);

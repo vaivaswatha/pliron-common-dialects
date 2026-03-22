@@ -2,7 +2,7 @@
 
 use pliron::derive::op_interface;
 
-use pliron::irbuild::dialect_conversion::{DialectConversionRewriter, OperandConversionInfo};
+use pliron::irbuild::dialect_conversion::{DialectConversionRewriter, OperandsInfo};
 use pliron::op::Op;
 use pliron::{context::Context, result::Result};
 
@@ -18,7 +18,7 @@ pub trait ToCFDialect {
         &self,
         ctx: &mut Context,
         rewriter: &mut DialectConversionRewriter,
-        operand_info: &[OperandConversionInfo],
+        operands_info: &OperandsInfo,
     ) -> Result<()>;
 
     fn verify(_op: &dyn Op, _ctx: &Context) -> Result<()>
