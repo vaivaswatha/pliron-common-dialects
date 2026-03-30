@@ -14,6 +14,7 @@ use pliron::{
         rewriter::{Rewriter, ScopedRewriter},
     },
     linked_list::LinkedList,
+    location::Located,
     op::{Op, op_cast, op_impls},
     operation::Operation,
     region::Region,
@@ -107,6 +108,7 @@ impl ToLLVMDialect for ForOp {
         let for_body_entry = self.get_entry(ctx);
 
         let self_op = self.get_operation();
+        let self_op_loc = self_op.deref(ctx).loc();
 
         let pre_header = self_op
             .deref(ctx)
@@ -118,7 +120,9 @@ impl ToLLVMDialect for ForOp {
 
         let iv_ty = iv.get_type(ctx);
         let to_llvm_ty = type_cast::<dyn ToLLVMType>(&**iv_ty.deref(ctx))
-            .ok_or_else(|| input_error!(self.loc(ctx), ForOpConversionErr::UnsupportedIVType))?
+            .ok_or_else(|| {
+                input_error!(self_op_loc.clone(), ForOpConversionErr::UnsupportedIVType)
+            })?
             .converter();
         let iv_ty = to_llvm_ty(iv_ty, ctx)?;
         // We change the type of the induction variable to an LLVM integer type.
@@ -136,6 +140,7 @@ impl ToLLVMDialect for ForOp {
             Some("for_op_header".try_into().unwrap()),
             std::iter::once(iv_ty).chain(iter_var_types).collect(),
         );
+        header.deref_mut(ctx).set_loc(self_op_loc);
         let header_iv = header.deref(ctx).get_argument(0);
         let header_args = header.deref(ctx).arguments().collect::<Vec<_>>();
         let cmp = ICmpOp::new(ctx, ICmpPredicateAttr::ULT, header_iv, upper_bound);

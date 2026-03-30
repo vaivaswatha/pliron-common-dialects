@@ -9,7 +9,7 @@ use pliron::{
     irbuild::dialect_conversion::apply_dialect_conversion,
     irfmt::parsers::spaced,
     location,
-    op::verify_op,
+    op::{Op, verify_op},
     operation::Operation,
     parsable::{self, state_stream_from_iterator},
     printable::Printable,
@@ -62,35 +62,51 @@ fn test_for_op_to_llvm_conversion() {
     apply_dialect_conversion(ctx, &mut CFToLLVM, parsed_op).expect_ok(ctx);
     verify_op(&module_op, ctx).expect_ok(ctx);
 
-    let print_parsed = format!("{}", module_op.disp(ctx));
+    let print_parsed = format!("{}", module_op.get_operation().disp(ctx));
     expect![[r#"
-                builtin.module @test_module 
-                {
-                  ^entry_block3v1():
-                    llvm.func @test_for: llvm.func <builtin.fp32 () variadic = false>
-                      [] 
-                    {
-                      ^entry_block2v1():
-                        op12v1_res0 = llvm.constant <builtin.integer <0: i64>> : builtin.integer i64;
-                        op3v3_res0 = llvm.constant <builtin.integer <10: i64>> : builtin.integer i64;
-                        op4v3_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64;
-                        init_op6v1_res0 = llvm.constant <builtin.single 1> : builtin.fp32  !0;
-                        inc_op7v1_res0 = llvm.constant <builtin.single 3.5> : builtin.fp32  !1;
-                        llvm.br ^for_op_header_block5v1(op12v1_res0, init_op6v1_res0)
+        builtin.module @test_module 
+        {
+          ^entry_block3v1() !0:
+            llvm.func @test_for: llvm.func <builtin.fp32 () variadic = false>
+              [] 
+            {
+              ^entry_block2v1() !1:
+                op12v1_res0 = llvm.constant <builtin.integer <0: i64>> : builtin.integer i64 !2;
+                op3v3_res0 = llvm.constant <builtin.integer <10: i64>> : builtin.integer i64 !3;
+                op4v3_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64 !4;
+                init_op6v1_res0 = llvm.constant <builtin.single 1> : builtin.fp32  !5;
+                inc_op7v1_res0 = llvm.constant <builtin.single 3.5> : builtin.fp32  !6;
+                llvm.br ^for_op_header_block5v1(op12v1_res0, init_op6v1_res0)
 
-                      ^for_op_header_block5v1(block5v1_arg0: builtin.integer i64, block5v1_arg1: builtin.fp32 ):
-                        op5v3_res0 = llvm.icmp block5v1_arg0 <ULT> op3v3_res0 : builtin.integer i1;
-                        llvm.cond_br if op5v3_res0 ^entry_block1v1(block5v1_arg0, block5v1_arg1) else ^entry_split_block4v1()
+              ^for_op_header_block5v1(block5v1_arg0: builtin.integer i64, block5v1_arg1: builtin.fp32 ) !7:
+                op5v3_res0 = llvm.icmp block5v1_arg0 <ULT> op3v3_res0 : builtin.integer i1;
+                llvm.cond_br if op5v3_res0 ^entry_block1v1(block5v1_arg0, block5v1_arg1) else ^entry_split_block4v1()
 
-                      ^entry_block1v1(iv_block1v1_arg0: builtin.integer i64, iter_arg_block1v1_arg1: builtin.fp32 ):
-                        next_op10v1_res0 = llvm.fadd <NNAN | NINF | NSZ | ARCP | CONTRACT | AFN | REASSOC> iter_arg_block1v1_arg1, inc_op7v1_res0 : builtin.fp32  !2;
-                        op15v1_res0 = llvm.add iv_block1v1_arg0, op4v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
-                        llvm.br ^for_op_header_block5v1(op15v1_res0, next_op10v1_res0)
+              ^entry_block1v1(iv_block1v1_arg0: builtin.integer i64, iter_arg_block1v1_arg1: builtin.fp32 ) !8:
+                next_op10v1_res0 = llvm.fadd <NNAN | NINF | NSZ | ARCP | CONTRACT | AFN | REASSOC> iter_arg_block1v1_arg1, inc_op7v1_res0 : builtin.fp32  !9;
+                op15v1_res0 = llvm.add iv_block1v1_arg0, op4v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
+                llvm.br ^for_op_header_block5v1(op15v1_res0, next_op10v1_res0)
 
-                      ^entry_split_block4v1():
-                        llvm.return block5v1_arg1 !3
-                    } !4
-                }"#]].assert_eq(&print_parsed);
+              ^entry_split_block4v1():
+                llvm.return block5v1_arg1 !10
+            } !11
+        } !12
+
+        outlined_attributes:
+        !0 = @[<in-memory>: line: 3, column: 15], []
+        !1 = @[<in-memory>: line: 5, column: 19], []
+        !2 = @[<in-memory>: line: 6, column: 21], []
+        !3 = @[<in-memory>: line: 7, column: 21], []
+        !4 = @[<in-memory>: line: 8, column: 21], []
+        !5 = @[<in-memory>: line: 9, column: 21], [builtin_debug_info = builtin.debug_info [init]]
+        !6 = @[<in-memory>: line: 10, column: 21], [builtin_debug_info = builtin.debug_info [inc]]
+        !7 = @[<in-memory>: line: 12, column: 21], []
+        !8 = @[<in-memory>: line: 13, column: 25], [builtin_debug_info = builtin.debug_info [iv, iter_arg]]
+        !9 = @[<in-memory>: line: 14, column: 29], [builtin_debug_info = builtin.debug_info [next]]
+        !10 = @[<in-memory>: line: 18, column: 21], []
+        !11 = @[<in-memory>: line: 4, column: 17], []
+        !12 = @[<in-memory>: line: 2, column: 13], []
+    "#]].assert_eq(&print_parsed);
 
     let llvm_ctx = LLVMContext::default();
     let llvm_ir = pliron_llvm::to_llvm_ir::convert_module(ctx, &llvm_ctx, module_op).expect_ok(ctx);
@@ -189,56 +205,81 @@ fn test_ndfor_op_to_llvm_conversion() {
     apply_dialect_conversion(ctx, &mut CFToLLVM, parsed_op).expect_ok(ctx);
     verify_op(&module_op, ctx).expect_ok(ctx);
 
-    let print_parsed = format!("{}", module_op.disp(ctx));
+    let print_parsed = format!("{}", module_op.get_operation().disp(ctx));
     expect![[r#"
-            builtin.module @test_module 
+        builtin.module @test_module 
+        {
+          ^entry_block3v1() !0:
+            llvm.func @test_ndfor: llvm.func <builtin.fp32 () variadic = false>
+              [] 
             {
-              ^entry_block3v1():
-                llvm.func @test_ndfor: llvm.func <builtin.fp32 () variadic = false>
-                  [] 
-                {
-                  ^entry_block2v1():
-                    op19v1_res0 = llvm.constant <builtin.integer <0: i64>> : builtin.integer i64;
-                    op3v3_res0 = llvm.constant <builtin.integer <10: i64>> : builtin.integer i64;
-                    op4v3_res0 = llvm.constant <builtin.integer <11: i64>> : builtin.integer i64;
-                    op5v3_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64;
-                    c1_0_op7v1_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64 !0;
-                    accum_op8v1_res0 = llvm.alloca [builtin.fp32  x c1_0_op7v1_res0]  : llvm.ptr  !1;
-                    f0_op9v1_res0 = llvm.constant <builtin.single 0> : builtin.fp32  !2;
-                    f1_op10v1_res0 = llvm.constant <builtin.single 1.5> : builtin.fp32  !3;
-                    llvm.store *accum_op8v1_res0 <- f0_op9v1_res0  !4;
-                    llvm.br ^for_op_header_block9v1(op19v1_res0)
+              ^entry_block2v1() !1:
+                op19v1_res0 = llvm.constant <builtin.integer <0: i64>> : builtin.integer i64 !2;
+                op3v3_res0 = llvm.constant <builtin.integer <10: i64>> : builtin.integer i64 !3;
+                op4v3_res0 = llvm.constant <builtin.integer <11: i64>> : builtin.integer i64 !4;
+                op5v3_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64 !5;
+                c1_0_op7v1_res0 = llvm.constant <builtin.integer <1: i64>> : builtin.integer i64 !6;
+                accum_op8v1_res0 = llvm.alloca [builtin.fp32  x c1_0_op7v1_res0]  : llvm.ptr  !7;
+                f0_op9v1_res0 = llvm.constant <builtin.single 0> : builtin.fp32  !8;
+                f1_op10v1_res0 = llvm.constant <builtin.single 1.5> : builtin.fp32  !9;
+                llvm.store *accum_op8v1_res0 <- f0_op9v1_res0  !10;
+                llvm.br ^for_op_header_block9v1(op19v1_res0)
 
-                  ^for_op_header_block9v1(block9v1_arg0: builtin.integer i64):
-                    op16v5_res0 = llvm.icmp block9v1_arg0 <ULT> op3v3_res0 : builtin.integer i1;
-                    llvm.cond_br if op16v5_res0 ^entry_block5v1(block9v1_arg0) else ^entry_split_block8v1()
+              ^for_op_header_block9v1(block9v1_arg0: builtin.integer i64) !11:
+                op16v5_res0 = llvm.icmp block9v1_arg0 <ULT> op3v3_res0 : builtin.integer i1;
+                llvm.cond_br if op16v5_res0 ^entry_block5v1(block9v1_arg0) else ^entry_split_block8v1()
 
-                  ^entry_block5v1(iv_block5v1_arg0: builtin.integer i64):
-                    llvm.br ^for_op_header_block7v1(op19v1_res0)
+              ^entry_block5v1(iv_block5v1_arg0: builtin.integer i64) !12:
+                llvm.br ^for_op_header_block7v1(op19v1_res0)
 
-                  ^for_op_header_block7v1(block7v1_arg0: builtin.integer i64):
-                    op12v3_res0 = llvm.icmp block7v1_arg0 <ULT> op4v3_res0 : builtin.integer i1;
-                    llvm.cond_br if op12v3_res0 ^entry_block4v1(block7v1_arg0) else ^entry_split_block6v1()
+              ^for_op_header_block7v1(block7v1_arg0: builtin.integer i64):
+                op12v3_res0 = llvm.icmp block7v1_arg0 <ULT> op4v3_res0 : builtin.integer i1;
+                llvm.cond_br if op12v3_res0 ^entry_block4v1(block7v1_arg0) else ^entry_split_block6v1()
 
-                  ^entry_block4v1(iv_block4v1_arg0: builtin.integer i64):
-                    llvm.br ^entry_block1v1(iv_block5v1_arg0, iv_block4v1_arg0)
+              ^entry_block4v1(iv_block4v1_arg0: builtin.integer i64) !13:
+                llvm.br ^entry_block1v1(iv_block5v1_arg0, iv_block4v1_arg0)
 
-                  ^entry_block1v1(i_block1v1_arg0: builtin.integer i64, j_block1v1_arg1: builtin.integer i64):
-                    accum_val_op13v1_res0 = llvm.load accum_op8v1_res0  : builtin.fp32  !5;
-                    sum_op14v1_res0 = llvm.fadd <NNAN | NINF | NSZ | ARCP | CONTRACT | AFN | REASSOC> accum_val_op13v1_res0, f1_op10v1_res0 : builtin.fp32  !6;
-                    llvm.store *accum_op8v1_res0 <- sum_op14v1_res0  !7;
-                    op25v1_res0 = llvm.add iv_block4v1_arg0, op5v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
-                    llvm.br ^for_op_header_block7v1(op25v1_res0)
+              ^entry_block1v1(i_block1v1_arg0: builtin.integer i64, j_block1v1_arg1: builtin.integer i64) !14:
+                accum_val_op13v1_res0 = llvm.load accum_op8v1_res0  : builtin.fp32  !15;
+                sum_op14v1_res0 = llvm.fadd <NNAN | NINF | NSZ | ARCP | CONTRACT | AFN | REASSOC> accum_val_op13v1_res0, f1_op10v1_res0 : builtin.fp32  !16;
+                llvm.store *accum_op8v1_res0 <- sum_op14v1_res0  !17;
+                op25v1_res0 = llvm.add iv_block4v1_arg0, op5v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
+                llvm.br ^for_op_header_block7v1(op25v1_res0)
 
-                  ^entry_split_block6v1():
-                    op28v1_res0 = llvm.add iv_block5v1_arg0, op5v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
-                    llvm.br ^for_op_header_block9v1(op28v1_res0)
+              ^entry_split_block6v1():
+                op28v1_res0 = llvm.add iv_block5v1_arg0, op5v3_res0 <{nsw=false,nuw=false}>: builtin.integer i64;
+                llvm.br ^for_op_header_block9v1(op28v1_res0)
 
-                  ^entry_split_block8v1():
-                    result_op17v1_res0 = llvm.load accum_op8v1_res0  : builtin.fp32  !8;
-                    llvm.return result_op17v1_res0 !9
-                } !10
-            }"#]].assert_eq(&print_parsed);
+              ^entry_split_block8v1():
+                result_op17v1_res0 = llvm.load accum_op8v1_res0  : builtin.fp32  !18;
+                llvm.return result_op17v1_res0 !19
+            } !20
+        } !21
+
+        outlined_attributes:
+        !0 = @[<in-memory>: line: 3, column: 15], []
+        !1 = @[<in-memory>: line: 5, column: 19], []
+        !2 = @[<in-memory>: line: 6, column: 21], []
+        !3 = @[<in-memory>: line: 7, column: 21], []
+        !4 = @[<in-memory>: line: 8, column: 21], []
+        !5 = @[<in-memory>: line: 9, column: 21], []
+        !6 = @[<in-memory>: line: 10, column: 21], [builtin_debug_info = builtin.debug_info [c1_0]]
+        !7 = @[<in-memory>: line: 11, column: 21], [builtin_debug_info = builtin.debug_info [accum]]
+        !8 = @[<in-memory>: line: 12, column: 21], [builtin_debug_info = builtin.debug_info [f0]]
+        !9 = @[<in-memory>: line: 13, column: 21], [builtin_debug_info = builtin.debug_info [f1]]
+        !10 = @[<in-memory>: line: 14, column: 21], []
+        !11 = @[<in-memory>: line: 16, column: 21], []
+        !12 = [builtin_debug_info = builtin.debug_info [iv]]
+        !13 = [builtin_debug_info = builtin.debug_info [iv]]
+        !14 = @[<in-memory>: line: 17, column: 25], [builtin_debug_info = builtin.debug_info [i, j]]
+        !15 = @[<in-memory>: line: 18, column: 29], [builtin_debug_info = builtin.debug_info [accum_val]]
+        !16 = @[<in-memory>: line: 19, column: 29], [builtin_debug_info = builtin.debug_info [sum]]
+        !17 = @[<in-memory>: line: 20, column: 29], []
+        !18 = @[<in-memory>: line: 24, column: 21], [builtin_debug_info = builtin.debug_info [result]]
+        !19 = @[<in-memory>: line: 25, column: 21], []
+        !20 = @[<in-memory>: line: 4, column: 17], []
+        !21 = @[<in-memory>: line: 2, column: 13], []
+    "#]].assert_eq(&print_parsed);
 
     let llvm_ctx = LLVMContext::default();
     let llvm_ir = pliron_llvm::to_llvm_ir::convert_module(ctx, &llvm_ctx, module_op).expect_ok(ctx);
