@@ -5,7 +5,7 @@ use pliron::{
     builtin::ops::ModuleOp,
     combine::Parser,
     context::Context,
-    input_error_noloc,
+    init_env_logger, input_error_noloc,
     irbuild::dialect_conversion::apply_dialect_conversion,
     irfmt::parsers::spaced,
     location,
@@ -158,6 +158,7 @@ fn test_for_op_to_llvm_conversion() {
 // Test [NDForOp] to LLVM conversion with multiple loop dimensions.
 #[test]
 fn test_ndfor_op_to_llvm_conversion() {
+    init_env_logger!();
     let ctx = &mut Context::new();
 
     let input_ir = r#"
@@ -289,51 +290,51 @@ fn test_ndfor_op_to_llvm_conversion() {
         .unwrap();
 
     expect![[r#"
-            ; ModuleID = 'test_module'
-            source_filename = "test_module"
+        ; ModuleID = 'test_module'
+        source_filename = "test_module"
 
-            define float @test_ndfor() {
-            entry_block2v1:
-              %accum_op8v1_res0 = alloca float, i64 1, align 4
-              store float 0.000000e+00, ptr %accum_op8v1_res0, align 4
-              br label %for_op_header_block9v1
+        define float @test_ndfor() {
+        entry_block2v1:
+          %accum_op8v1_res0 = alloca float, i64 1, align 4
+          store float 0.000000e+00, ptr %accum_op8v1_res0, align 4
+          br label %for_op_header_block9v1
 
-            for_op_header_block9v1:                           ; preds = %entry_split_block6v1, %entry_block2v1
-              %block9v1_arg0 = phi i64 [ 0, %entry_block2v1 ], [ %op28v1_res0, %entry_split_block6v1 ]
-              %op16v5_res0 = icmp ult i64 %block9v1_arg0, 10
-              br i1 %op16v5_res0, label %entry_block5v1, label %entry_split_block8v1
+        for_op_header_block9v1:                           ; preds = %entry_split_block6v1, %entry_block2v1
+          %block9v1_arg0 = phi i64 [ 0, %entry_block2v1 ], [ %op28v1_res0, %entry_split_block6v1 ]
+          %op16v5_res0 = icmp ult i64 %block9v1_arg0, 10
+          br i1 %op16v5_res0, label %entry_block5v1, label %entry_split_block8v1
 
-            entry_block5v1:                                   ; preds = %for_op_header_block9v1
-              %iv_block5v1_arg0 = phi i64 [ %block9v1_arg0, %for_op_header_block9v1 ]
-              br label %for_op_header_block7v1
+        entry_block5v1:                                   ; preds = %for_op_header_block9v1
+          %iv_block5v1_arg0 = phi i64 [ %block9v1_arg0, %for_op_header_block9v1 ]
+          br label %for_op_header_block7v1
 
-            for_op_header_block7v1:                           ; preds = %entry_block1v1, %entry_block5v1
-              %block7v1_arg0 = phi i64 [ 0, %entry_block5v1 ], [ %op25v1_res0, %entry_block1v1 ]
-              %op12v3_res0 = icmp ult i64 %block7v1_arg0, 11
-              br i1 %op12v3_res0, label %entry_block4v1, label %entry_split_block6v1
+        for_op_header_block7v1:                           ; preds = %entry_block1v1, %entry_block5v1
+          %block7v1_arg0 = phi i64 [ 0, %entry_block5v1 ], [ %op25v1_res0, %entry_block1v1 ]
+          %op12v3_res0 = icmp ult i64 %block7v1_arg0, 11
+          br i1 %op12v3_res0, label %entry_block4v1, label %entry_split_block6v1
 
-            entry_block4v1:                                   ; preds = %for_op_header_block7v1
-              %iv_block4v1_arg0 = phi i64 [ %block7v1_arg0, %for_op_header_block7v1 ]
-              br label %entry_block1v1
+        entry_block4v1:                                   ; preds = %for_op_header_block7v1
+          %iv_block4v1_arg0 = phi i64 [ %block7v1_arg0, %for_op_header_block7v1 ]
+          br label %entry_block1v1
 
-            entry_block1v1:                                   ; preds = %entry_block4v1
-              %i_block1v1_arg0 = phi i64 [ %iv_block5v1_arg0, %entry_block4v1 ]
-              %j_block1v1_arg1 = phi i64 [ %iv_block4v1_arg0, %entry_block4v1 ]
-              %accum_val_op13v1_res0 = load float, ptr %accum_op8v1_res0, align 4
-              %sum_op14v1_res0 = fadd fast float %accum_val_op13v1_res0, 1.500000e+00
-              store float %sum_op14v1_res0, ptr %accum_op8v1_res0, align 4
-              %op25v1_res0 = add i64 %iv_block4v1_arg0, 1
-              br label %for_op_header_block7v1
+        entry_block1v1:                                   ; preds = %entry_block4v1
+          %i_block1v1_arg0 = phi i64 [ %iv_block5v1_arg0, %entry_block4v1 ]
+          %j_block1v1_arg1 = phi i64 [ %iv_block4v1_arg0, %entry_block4v1 ]
+          %accum_val_op13v1_res0 = load float, ptr %accum_op8v1_res0, align 4
+          %sum_op14v1_res0 = fadd fast float %accum_val_op13v1_res0, 1.500000e+00
+          store float %sum_op14v1_res0, ptr %accum_op8v1_res0, align 4
+          %op25v1_res0 = add i64 %iv_block4v1_arg0, 1
+          br label %for_op_header_block7v1
 
-            entry_split_block6v1:                             ; preds = %for_op_header_block7v1
-              %op28v1_res0 = add i64 %iv_block5v1_arg0, 1
-              br label %for_op_header_block9v1
+        entry_split_block6v1:                             ; preds = %for_op_header_block7v1
+          %op28v1_res0 = add i64 %iv_block5v1_arg0, 1
+          br label %for_op_header_block9v1
 
-            entry_split_block8v1:                             ; preds = %for_op_header_block9v1
-              %result_op17v1_res0 = load float, ptr %accum_op8v1_res0, align 4
-              ret float %result_op17v1_res0
-            }
-        "#]].assert_eq(&llvm_ir.to_string());
+        entry_split_block8v1:                             ; preds = %for_op_header_block9v1
+          %result_op17v1_res0 = load float, ptr %accum_op8v1_res0, align 4
+          ret float %result_op17v1_res0
+        }
+    "#]].assert_eq(&llvm_ir.to_string());
 
     // Let's try and execute this function
     initialize_native().expect("Failed to initialize native target for LLVM execution");

@@ -38,11 +38,11 @@ use crate::cf::{
 pub struct CFToLLVM;
 
 impl DialectConversion for CFToLLVM {
-    fn can_convert_op(&mut self, ctx: &Context, op: Ptr<Operation>) -> bool {
+    fn can_convert_op(&self, ctx: &Context, op: Ptr<Operation>) -> bool {
         op_impls::<dyn ToLLVMDialect>(&*Operation::get_op_dyn(op, ctx))
     }
 
-    fn can_convert_type(&mut self, ctx: &Context, ty: Ptr<TypeObj>) -> bool {
+    fn can_convert_type(&self, ctx: &Context, ty: Ptr<TypeObj>) -> bool {
         type_cast::<dyn ToLLVMType>(&**ty.deref(ctx)).is_some()
     }
 

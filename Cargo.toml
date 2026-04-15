@@ -8,3 +8,6 @@ pliron = { git = "https://github.com/vaivaswatha/pliron.git" }
 pliron-llvm = { git = "https://github.com/vaivaswatha/pliron.git" }
 thiserror = "2"
 expect-test = "1"
+
+[dev-dependencies]
+env_logger = "0"
