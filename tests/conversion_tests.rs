@@ -5,7 +5,7 @@ use pliron::{
     builtin::ops::ModuleOp,
     combine::Parser,
     context::Context,
-    init_env_logger, input_error_noloc,
+    init_env_logger_for_tests, input_error_noloc,
     irbuild::dialect_conversion::apply_dialect_conversion,
     irfmt::parsers::spaced,
     location,
@@ -22,6 +22,7 @@ use pliron_common_dialects::cf::to_llvm::CFToLLVM;
 
 #[test]
 fn test_for_op_to_llvm_conversion() {
+    init_env_logger_for_tests!();
     let ctx = &mut Context::new();
 
     let input_ir = r#"
@@ -158,7 +159,7 @@ fn test_for_op_to_llvm_conversion() {
 // Test [NDForOp] to LLVM conversion with multiple loop dimensions.
 #[test]
 fn test_ndfor_op_to_llvm_conversion() {
-    init_env_logger!();
+    init_env_logger_for_tests!();
     let ctx = &mut Context::new();
 
     let input_ir = r#"
