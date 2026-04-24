@@ -16,6 +16,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - uses: dtolnay/rust-toolchain@stable
+
     - name: Setup LLVM
       run: |
         wget https://apt.llvm.org/llvm.sh
