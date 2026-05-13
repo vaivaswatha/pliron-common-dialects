@@ -200,7 +200,7 @@ impl ForOp {
         let entry_block = BasicBlock::new(ctx, Some("entry".try_into().unwrap()), region_arg_types);
         entry_block.insert_at_front(region, ctx);
         for (arg_idx, name) in region_arg_names.into_iter().enumerate() {
-            set_block_arg_name(ctx, entry_block, arg_idx, name);
+            set_block_arg_name(ctx, entry_block, arg_idx, Some(name));
         }
 
         // Populate the body.
